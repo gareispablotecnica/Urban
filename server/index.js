@@ -3,6 +3,8 @@ import cors from "cors";
 import sqlite3 from "sqlite3";
 import { fileURLToPath } from "url";
 import path from "path";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import { products, HERO_IMAGE } from "./seed.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -29,6 +31,14 @@ async function init() {
     sizes TEXT,
     tag TEXT,
     image TEXT
+  )`);
+  await run(`CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'user',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`);
   const { n } = await get("SELECT COUNT(*) AS n FROM products");
   if (n === 0) {
@@ -119,6 +129,73 @@ app.get("/api/filters", async (_req, res) => {
     res.status(500).json({ error: "Error al obtener filtros" });
   }
 });
+
+
+// ───────────── Autenticación ─────────────
+// En producción definí JWT_SECRET como variable de entorno.
+const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-cambiar-en-produccion";
+const TOKEN_TTL = "7d";
+
+const publicUser = (u) => ({ id: u.id, name: u.name, email: u.email, role: u.role, created_at: u.created_at });
+const signToken = (u) => jwt.sign({ sub: u.id }, JWT_SECRET, { expiresIn: TOKEN_TTL });
+
+// Middleware: exige "Authorization: Bearer <token>"
+async function requireAuth(req, res, next) {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+  if (!token) return res.status(401).json({ error: "Necesitás iniciar sesión." });
+  try {
+    const { sub } = jwt.verify(token, JWT_SECRET);
+    const user = await get("SELECT * FROM users WHERE id = ?", [sub]);
+    if (!user) return res.status(401).json({ error: "Tu sesión ya no es válida." });
+    req.user = user;
+    next();
+  } catch {
+    res.status(401).json({ error: "Tu sesión venció. Ingresá de nuevo." });
+  }
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+app.post("/api/auth/register", async (req, res) => {
+  try {
+    const name = String(req.body?.name || "").trim();
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const password = String(req.body?.password || "");
+
+    if (name.length < 2) return res.status(400).json({ error: "Ingresá tu nombre." });
+    if (!EMAIL_RE.test(email)) return res.status(400).json({ error: "Ingresá un email válido." });
+    if (password.length < 6) return res.status(400).json({ error: "La contraseña necesita al menos 6 caracteres." });
+
+    const exists = await get("SELECT id FROM users WHERE email = ?", [email]);
+    if (exists) return res.status(409).json({ error: "Ya existe una cuenta con ese email." });
+
+    const hash = await bcrypt.hash(password, 10);
+    const { lastID } = await run("INSERT INTO users (name, email, password_hash) VALUES (?,?,?)", [name, email, hash]);
+    const user = await get("SELECT * FROM users WHERE id = ?", [lastID]);
+    res.status(201).json({ token: signToken(user), user: publicUser(user) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "No pudimos crear la cuenta. Probá de nuevo." });
+  }
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const password = String(req.body?.password || "");
+    const user = await get("SELECT * FROM users WHERE email = ?", [email]);
+    // Mismo mensaje si falla el email o la contraseña: no revela qué cuentas existen
+    const ok = user && (await bcrypt.compare(password, user.password_hash));
+    if (!ok) return res.status(401).json({ error: "Email o contraseña incorrectos." });
+    res.json({ token: signToken(user), user: publicUser(user) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "No pudimos iniciar sesión. Probá de nuevo." });
+  }
+});
+
+app.get("/api/auth/me", requireAuth, (req, res) => res.json({ user: publicUser(req.user) }));
 
 const PORT = process.env.PORT || 4000;
 init().then(() =>

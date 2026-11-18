@@ -2,10 +2,14 @@ import { useEffect, useState } from "react";
 import { Routes, Route, NavLink, Link, useLocation } from "react-router-dom";
 import Home from "./pages/Home.jsx";
 import Products from "./pages/Products.jsx";
+import Auth from "./pages/Auth.jsx";
+import Account from "./pages/Account.jsx";
+import { useAuth } from "./auth.jsx";
 
 export default function App() {
   const { pathname } = useLocation();
   const [cart, setCart] = useState(0);
+  const { user, logout } = useAuth();
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -28,15 +32,28 @@ export default function App() {
           <NavLink to="/productos">Productos</NavLink>
           <Link to="/productos?sale=1" className="hot">Sale</Link>
         </nav>
-        <button className="cart" onClick={() => setCart(0)} title="Vaciar carrito">
-          BAG <b>{cart}</b>
-        </button>
+        <div className="nav-right">
+          {user ? (
+            <>
+              <Link to="/cuenta" className="nav-user">{user.name.split(" ")[0]}</Link>
+              <button className="nav-link" onClick={logout}>Salir</button>
+            </>
+          ) : (
+            <Link to="/login" className="nav-link">Ingresar</Link>
+          )}
+          <button className="cart" onClick={() => setCart(0)} title="Vaciar carrito">
+            BAG <b>{cart}</b>
+          </button>
+        </div>
       </header>
 
       <main>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/productos" element={<Products onAdd={() => setCart((c) => c + 1)} />} />
+          <Route path="/login" element={<Auth mode="login" />} />
+          <Route path="/registro" element={<Auth mode="register" />} />
+          <Route path="/cuenta" element={<Account />} />
         </Routes>
       </main>
 

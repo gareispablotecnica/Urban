@@ -26,6 +26,8 @@ Aplicación web de comercio electrónico para una marca de ropa urbana. Incluye 
 - Diseño responsivo; en pantallas pequeñas los filtros se muestran en un panel lateral.
 - Imagen de reemplazo automática cuando un producto no tiene foto o su enlace falla.
 - Base de datos inicializada automáticamente con productos de ejemplo.
+- Registro e inicio de sesión de usuarios, con contraseñas cifradas (bcrypt) y sesión mediante token JWT.
+- Página de cuenta protegida, accesible solo con sesión iniciada.
 - Respeto por la preferencia de movimiento reducido del sistema operativo.
 
 ## Tecnologías
@@ -35,6 +37,7 @@ Aplicación web de comercio electrónico para una marca de ropa urbana. Incluye 
 | Frontend | React 18, React Router 6, Vite 5 |
 | Backend | Node.js, Express 4 |
 | Base de datos | SQLite (paquete `sqlite3`) |
+| Autenticación | `bcryptjs` y `jsonwebtoken` |
 | Estilos | CSS puro con variables personalizadas |
 
 ## Requisitos
@@ -181,6 +184,18 @@ Respuesta:
 ### GET /api/filters
 
 Devuelve los valores disponibles para construir los filtros: categorías con su cantidad de productos, colores, talles, precio mínimo y precio máximo.
+
+### Autenticación
+
+| Método y ruta | Descripción | Cuerpo |
+|---------------|-------------|--------|
+| `POST /api/auth/register` | Crea una cuenta y devuelve token y usuario | `name`, `email`, `password` (mínimo 6 caracteres) |
+| `POST /api/auth/login` | Inicia sesión y devuelve token y usuario | `email`, `password` |
+| `GET /api/auth/me` | Devuelve el usuario de la sesión actual | Encabezado `Authorization: Bearer <token>` |
+
+Los usuarios se guardan en la tabla `users` de `server/store.db`. Las contraseñas nunca se almacenan en texto plano. El token vence a los 7 días.
+
+Para producción, definir la variable de entorno `JWT_SECRET` con un valor largo y aleatorio; si no existe, se usa un valor de desarrollo que no debe publicarse. El cliente guarda el token en `localStorage`, adecuado para practicar; en un sitio real conviene usar una cookie `httpOnly`. El servidor no limita intentos de inicio de sesión, por lo que también conviene agregar un límite antes de publicarlo.
 
 ### GET /api/config
 
