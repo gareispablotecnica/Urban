@@ -8,7 +8,9 @@ import jwt from "jsonwebtoken";
 import { products, HERO_IMAGE } from "./seed.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const db = new (sqlite3.verbose().Database)(path.join(__dirname, "store.db"));
+// En Vercel el disco es de solo lectura salvo /tmp (se borra cuando la función se reinicia)
+const DB_FILE = process.env.VERCEL ? "/tmp/store.db" : path.join(__dirname, "store.db");
+const db = new (sqlite3.verbose().Database)(DB_FILE);
 
 // Promesas sobre sqlite3
 const run = (sql, p = []) =>
@@ -52,9 +54,21 @@ async function init() {
   }
 }
 
+// Se inicia una sola vez; cada pedido espera a que la base esté lista
+const ready = init();
+ready.catch((e) => console.error("Error al iniciar la base:", e));
+
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(async (_req, _res, next) => {
+  try { await ready; next(); } catch (e) { next(e); }
+});
+// Vercel puede entregar la ruta con o sin "/api": se normaliza para que siempre lo tenga
+app.use((req, _res, next) => {
+  if (!req.url.startsWith("/api")) req.url = "/api" + req.url;
+  next();
+});
 
 app.get("/api/config", (_req, res) => res.json({ heroImage: HERO_IMAGE }));
 
@@ -197,7 +211,10 @@ app.post("/api/auth/login", async (req, res) => {
 
 app.get("/api/auth/me", requireAuth, (req, res) => res.json({ user: publicUser(req.user) }));
 
-const PORT = process.env.PORT || 4000;
-init().then(() =>
-  app.listen(PORT, () => console.log(`API lista en http://localhost:${PORT}`))
-);
+// En tu compu escucha en un puerto; en Vercel se exporta la app y Vercel la ejecuta
+if (!process.env.VERCEL) {
+  const PORT = process.env.PORT || 4000;
+  ready.then(() => app.listen(PORT, () => console.log(`API lista en http://localhost:${PORT}`)));
+}
+
+export default app;
