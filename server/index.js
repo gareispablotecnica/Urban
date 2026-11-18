@@ -147,7 +147,8 @@ app.get("/api/filters", async (_req, res) => {
 
 // ───────────── Autenticación ─────────────
 // En producción definí JWT_SECRET como variable de entorno.
-const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-cambiar-en-produccion";
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.VERCEL ? "" : "dev-secret-cambiar-en-produccion");
+if (!JWT_SECRET) throw new Error("Falta la variable de entorno JWT_SECRET (Vercel > Settings > Environment Variables).");
 const TOKEN_TTL = "7d";
 
 const publicUser = (u) => ({ id: u.id, name: u.name, email: u.email, role: u.role, created_at: u.created_at });

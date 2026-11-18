@@ -211,6 +211,18 @@ Devuelve la configuración pública, actualmente la imagen de portada (`heroImag
 | `npm run client` | raíz | Inicia solo el cliente |
 | `npm run build` | `client/` | Genera la versión de producción en `client/dist` |
 
+## Despliegue en Vercel
+
+El proyecto usa [Vercel Services](https://vercel.com/docs/services): el front (Vite) y la API (Express) se despliegan juntos desde `vercel.json`, y las rutas `/api/*` van a la API.
+
+1. Subí el repositorio a GitHub (`.gitignore` ya excluye `node_modules`, `dist` y `*.db`).
+2. En Vercel: **Add New > Project**, importá el repositorio y dejá el directorio raíz en `./`.
+3. En **Build and Deployment**, elegí el framework preset **Services**.
+4. En **Environment Variables** agregá `JWT_SECRET` con una cadena larga y aleatoria (por ejemplo, la salida de `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`). Sin esta variable la API no arranca en Vercel.
+5. Presioná **Deploy**.
+
+Limitación importante: en Vercel el disco es de solo lectura salvo `/tmp`, por lo que la base SQLite se recrea cuando la función se reinicia. Los productos se vuelven a cargar desde `server/seed.js`, pero **las cuentas de usuario registradas se pierden**. Para guardar usuarios de forma permanente hay que migrar a una base externa (por ejemplo Turso o Neon).
+
 ## Solución de problemas
 
 **Error al instalar `sqlite3`.** El paquete descarga un binario precompilado según el sistema y la versión de Node. Si falla, verificar que Node sea 18 o superior y la conexión a internet. En caso de persistir, instalar las herramientas de compilación de la plataforma.
